@@ -1,79 +1,52 @@
 from collections import namedtuple
 
 
-class MagicMissile:
-    def __init__(self):
-        self.cost = 53
-        self.dmg = 4
-        self.heal = 0
-        self.length = 0
-        self.action = {}
+class Spell:
+    def __init__(self, **kwargs):
+        self.cost = kwargs['cost']
+        self.name = kwargs['name']
+        self.dmg = kwargs.get('damage', 0)
+        self.heal = kwargs.get('heal', 0)
+        self.length = kwargs.get('length', 0)
+        self.armor_effect = kwargs.get('armor_effect', 0)
+        self.damage_effect = kwargs.get('damage_effect', 0)
+        self.mana_effect = kwargs.get('mana_effect', 0)
 
     def __repr__(self):
-        return "<MagicMissile>"
+        if self.length > 0:
+            return f"<{self.name} @{self.length}>"
 
-
-class Drain:
-    def __init__(self):
-        self.cost = 73
-        self.dmg = 2
-        self.heal = 2
-        self.length = 0
-        self.action = {}
-
-    def __repr__(self):
-        return "<Drain>"
-
-
-class Shield:
-    def __init__(self):
-        self.cost = 113
-        self.dmg = 0
-        self.heal = 0
-        self.length = 6
-        self.action = {'armor': 7}
-
-    def __repr__(self):
-        return f"<Shield @{self.length}>"
+        return f"<{self.name}>"
 
     def clone(self):
-        other = Shield()
+        other = type(self)()
         other.length = self.length
         return other
 
 
-class Poison:
+class MagicMissile(Spell):
     def __init__(self):
-        self.cost = 173
-        self.dmg = 0
-        self.heal = 0
-        self.length = 6
-        self.action = {'damage': 3}
-
-    def __repr__(self):
-        return f"<Poison @{self.length}>"
-
-    def clone(self):
-        other = Poison()
-        other.length = self.length
-        return other
+        super().__init__(name='MagicMissile', cost=53, damage=4)
 
 
-class Recharge:
+class Drain(Spell):
     def __init__(self):
-        self.cost = 229
-        self.dmg = 0
-        self.heal = 0
-        self.length = 5
-        self.action = {'mana': 101}
+        super().__init__(name='Drain', cost=73, damage=2, heal=2)
 
-    def __repr__(self):
-        return f"<Recharge @{self.length}>"
 
-    def clone(self):
-        other = Recharge()
-        other.length = self.length
-        return other
+class Shield(Spell):
+    def __init__(self):
+        super().__init__(name='Shield', cost=113, length=6, armor_effect=7)
+
+
+class Poison(Spell):
+    def __init__(self):
+        super().__init__(name='Poison', cost=173, length=6, damage_effect=3)
+
+
+class Recharge(Spell):
+    def __init__(self):
+        super().__init__(name='Recharge', cost=229, length=5, mana_effect=101)
 
 
 SPELLS = [MagicMissile, Drain, Shield, Poison, Recharge]
@@ -88,7 +61,6 @@ def play_game(player, boss, hard_mode=False):
 
     spent_amounts = []
     seen_states = set()
-    completed = 0
 
     while len(queue) > 0:
         p, b, turn, total_spent = queue.pop()
@@ -103,41 +75,32 @@ def play_game(player, boss, hard_mode=False):
         if hard_mode:
             hp -= 1
 
-        # if completed % 10000 == 0:
-        #     print(f"completed {completed} games (queue = {len(queue)})")
-
         # process end-of-game conditions
         if hp <= 0:
-            completed += 1
             # print("oh no, player died.")
             continue
 
         if b.hp <= 0:
             # print("yay, player won")
-            completed += 1
             spent_amounts.append(total_spent)
             continue
 
         # process effects
         for spell in p.effects:
             spell.length -= 1
-            if 'mana' in spell.action:
-                mana += spell.action['mana']
-            if 'armor' in spell.action:
-                armor += spell.action['armor']
-            if 'damage' in spell.action:
-                damage += spell.action['damage']
+            mana += spell.mana_effect
+            armor += spell.armor_effect
+            damage += spell.damage_effect
 
             if spell.length > 0:
                 effects.append(spell)
 
+        # BOSS TURN
         if turn % 2 == 0:
-            # boss turn
             boss_hp = b.hp - damage
 
             if boss_hp <= 0:
                 # print("yay, player won")
-                completed += 1
                 spent_amounts.append(total_spent)
                 continue
 
@@ -151,24 +114,24 @@ def play_game(player, boss, hard_mode=False):
 
             continue
 
-        # it's now the player turn
+        # PLAYER TURN
         if mana < 53:
             # print("player can make no moves, so dies.")
-            completed += 1
             continue
 
-        # prune if we've seen this state already
+        # Before adding a bunch of nonsense to the queue: we only need to
+        # continue if we haven't been in this exact state before.
         ekey = ';'.join(sorted(map(str, effects)))
         key = (hp, mana, b.hp, ekey, total_spent)
         if key in seen_states:
             continue
-
-        seen_states.add(key)
+        else:
+            seen_states.add(key)
 
         # try everything we can
-        have = set(map(lambda e: type(e).__name__, effects))
+        have_effects = set(map(lambda e: type(e).__name__, effects))
         for cls in SPELLS:
-            if cls.__name__ in have:
+            if cls.__name__ in have_effects:
                 continue
 
             spell = cls()
